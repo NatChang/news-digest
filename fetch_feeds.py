@@ -108,6 +108,12 @@ def has_cjk(s):
     return bool(re.search(r"[一-鿿]", s))
 
 
+# feed 標題是不可信輸入：含 [ ] 時可截斷 Markdown 連結語法、偽造連結目標
+# （前面再加 ! 即成自動載入的圖片）。換成全形括號保留可讀性但無語法效果。
+def md_safe_title(s):
+    return s.replace("[", "［").replace("]", "］")
+
+
 # Storm 風傳媒 RSS gives links like https://www.storm.mg/12345?utm_source=rss
 # which 404; the working URL is https://www.storm.mg/article/12345
 _STORM_RSS = re.compile(r"^(https?://www\.storm\.mg)/(\d+)(?:\?.*)?$")
@@ -258,6 +264,9 @@ def main():
             if it["link"] and not it["link"].startswith("http"):
                 it["link"] = urljoin(url, it["link"])
             it["link"] = normalize_link(it["link"])
+            # 只接受 http(s)；javascript: 等其他 scheme 一律不輸出成連結
+            if it["link"] and not it["link"].startswith(("http://", "https://")):
+                it["link"] = ""
             if filter_seen and it["link"] and it["link"] in state:
                 continue
             kept.append(it)
@@ -308,8 +317,9 @@ def main():
                 d = it["published"]
                 ds = d.astimezone().strftime("%m/%d %H:%M") if d else "—"
                 flag = "" if has_cjk(it["title"]) else "  [EN→需翻譯]"
-                link = it["link"] or ""
-                lines.append(f"- [{it['title']}]({link}) · {ds}{flag}")
+                # 連結中的 ) 與空白會提前終止 Markdown 的 (url)，需百分比編碼
+                link = (it["link"] or "").replace("(", "%28").replace(")", "%29").replace(" ", "%20")
+                lines.append(f"- [{md_safe_title(it['title'])}]({link}) · {ds}{flag}")
             cut = truncated.get((c, source))
             if cut:
                 more = "再跑一次或加 --limit 可看到" if record else "加 --limit 可看到"
