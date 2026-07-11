@@ -17,6 +17,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import re
@@ -120,6 +121,48 @@ def normalize_link(link):
     return link
 
 
+# --- "Seen" state (for --unseen): remember which article links were already
+# shown, so re-running the same day only surfaces new articles. Stored as
+# {link: first-seen ISO timestamp} in a local JSON file outside the repo. ---
+DEFAULT_STATE = os.path.expanduser("~/.news-digest/seen.json")
+
+
+def load_state(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def prune_state(state, keep_days=14):
+    """Drop entries older than keep_days so the file can't grow forever."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=keep_days)
+    out = {}
+    for link, ts in state.items():
+        try:
+            t = datetime.fromisoformat(ts)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+            if t >= cutoff:
+                out[link] = ts
+        except Exception:
+            continue
+    return out
+
+
+def save_state(path, state):
+    try:
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False)
+    except Exception as e:
+        sys.stderr.write(f"[state save fail] {path}: {e}\n")
+
+
 def parse_feed(raw):
     """Return list of dicts: title, link, published(datetime|None)."""
     items = []
@@ -167,12 +210,17 @@ def main():
     ap.add_argument("--category", default="all")
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--format", default="md", choices=["md", "json"])
+    ap.add_argument("--unseen", action="store_true",
+                    help="only show articles not shown in previous runs; records shown ones")
+    ap.add_argument("--state", default=DEFAULT_STATE,
+                    help=f"path to the seen-links state file (default: {DEFAULT_STATE})")
     args = ap.parse_args()
 
     cat = CATEGORY_ALIASES.get(args.category.strip().lower(), None)
     if cat is None:
         cat = CATEGORY_ALIASES.get(args.category.strip(), "all")
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
+    state = load_state(args.state) if args.unseen else {}
 
     # category -> source -> [items]
     result = {}
@@ -189,6 +237,8 @@ def main():
             if it["link"] and not it["link"].startswith("http"):
                 it["link"] = urljoin(url, it["link"])
             it["link"] = normalize_link(it["link"])
+            if args.unseen and it["link"] and it["link"] in state:
+                continue
             kept.append(it)
         kept = kept[: args.limit]
         if not kept:
@@ -197,6 +247,16 @@ def main():
         display_cats = cats if cat == "all" else [cat]
         primary = display_cats[0]
         result.setdefault(primary, {}).setdefault(source, []).extend(kept)
+
+    # Record everything we're about to show, then prune + persist.
+    if args.unseen:
+        now = datetime.now(timezone.utc).isoformat()
+        for srcs in result.values():
+            for its in srcs.values():
+                for it in its:
+                    if it["link"]:
+                        state.setdefault(it["link"], now)
+        save_state(args.state, prune_state(state))
 
     if args.format == "json":
         serial = {
@@ -228,7 +288,10 @@ def main():
                 lines.append(f"- [{it['title']}]({link}) · {ds}{flag}")
             lines.append("")
     if not any_out:
-        lines.append("_此區間內沒有新文章。_")
+        if args.unseen:
+            lines.append("_沒有新文章（你沒看過的都看完了）。_")
+        else:
+            lines.append("_此區間內沒有新文章。_")
     print("\n".join(lines))
 
 
