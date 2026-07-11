@@ -26,37 +26,34 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin
 from xml.etree import ElementTree as ET
 
-# --- Feed catalogue (built-in defaults) -----------------------------------
-# Source of truth for the shipped defaults. Users DO NOT edit this — they add
-# or override categories/feeds in ~/.news-digest/config.json (see load_config).
-# Schema mirrors that user config so the two merge cleanly.
-_BUILTIN_CONFIG = {
-    "categories": {
-        # key -> {label, order, aliases}. `order` sets display order (low first).
-        "invest":    {"label": "📈 投資產業動態", "order": 10, "aliases": ["投資", "產業", "財經"]},
-        "itproduct": {"label": "💻 IT 最新產品動態", "order": 20, "aliases": ["it", "產品", "product"]},
-        "tech":      {"label": "🔬 最新技術發表", "order": 30, "aliases": ["技術", "技術發表", "科技"]},
-    },
-    "feeds": [
-        # 投資產業動態
-        {"source": "Storm 風傳媒財經",  "url": "https://www.storm.mg/api/getRss/channel_id/4",        "categories": ["invest"]},
-        {"source": "鉅亨網 cnYES 台股", "url": "https://news.cnyes.com/rss/v1/news/category/tw_stock", "categories": ["invest"]},
-        {"source": "DIGITIMES Asia",    "url": "https://www.digitimes.com/rss/daily.xml",             "categories": ["invest", "tech"]},
-        {"source": "SemiAnalysis",      "url": "https://www.semianalysis.com/feed",                   "categories": ["invest", "tech"]},
-        {"source": "TechNews 科技新報", "url": "https://technews.tw/tn-rss/",                         "categories": ["invest", "tech"]},
-        # IT 最新產品動態
-        {"source": "Engadget",          "url": "https://www.engadget.com/rss.xml",                    "categories": ["itproduct"]},
-        {"source": "The Verge",         "url": "https://www.theverge.com/rss/index.xml",              "categories": ["itproduct"]},
-        {"source": "iThome",            "url": "https://www.ithome.com.tw/rss",                       "categories": ["itproduct", "tech"]},
-        {"source": "電腦玩物",          "url": "https://feeds.feedburner.com/playpcesor",             "categories": ["itproduct"]},
-        # 最新技術發表
-        {"source": "TechBridge 技術共筆", "url": "https://blog.techbridge.cc/atom.xml",               "categories": ["tech"]},
-        {"source": "Linux Journal",     "url": "https://www.linuxjournal.com/node/feed",              "categories": ["tech"]},
-    ],
-}
+# --- Feed catalogue -------------------------------------------------------
+# The shipped default categories/feeds live in a tracked data file next to this
+# script (default_feeds.json), NOT hardcoded here — the feed list is data, so it
+# can be curated without touching code. Users add/override on top of it in
+# ~/.news-digest/config.json (see load_config). Both files share one schema:
+#   {"categories": {key: {label, order, aliases}}, "feeds": [{source, url, categories}]}
+_DEFAULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_feeds.json")
 
 # Where users define their own categories/feeds (JSON, zero extra deps).
 DEFAULT_CONFIG_PATH = os.path.expanduser("~/.news-digest/config.json")
+
+
+def _read_catalogue_file(path, label):
+    """Read a {categories, feeds} JSON file. Never raises: on any problem it
+    returns an empty catalogue with a warning so the skill keeps working."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {"categories": data.get("categories") or {},
+                    "feeds": data.get("feeds") or []}
+        sys.stderr.write(f"[{label}] {path}: top level must be an object; ignored\n")
+    except FileNotFoundError:
+        if label == "defaults":
+            sys.stderr.write(f"[{label}] {path} not found; starting from empty defaults\n")
+    except Exception as e:
+        sys.stderr.write(f"[{label}] {path}: {e}; ignored\n")
+    return {"categories": {}, "feeds": []}
 
 
 def _merge_config(base, user):
@@ -110,22 +107,13 @@ def _merge_config(base, user):
 
 
 def load_config(path=DEFAULT_CONFIG_PATH):
-    """Return the merged (built-in + user) config. Never raises: a missing or
-    malformed user config just falls back to the built-in defaults with a
-    warning, so the skill keeps working."""
-    user = {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            user = data
-        else:
-            sys.stderr.write(f"[config] {path}: top level must be an object; ignored\n")
-    except FileNotFoundError:
-        pass
-    except Exception as e:
-        sys.stderr.write(f"[config] {path}: {e}; using built-in defaults\n")
-    return _merge_config(_BUILTIN_CONFIG, user)
+    """Return the merged config: shipped defaults (default_feeds.json, tracked)
+    overlaid with the user's own categories/feeds (~/.news-digest/config.json,
+    private, optional). Never raises: a missing or malformed file on either side
+    just contributes nothing, so the skill keeps working."""
+    defaults = _read_catalogue_file(_DEFAULTS_PATH, "defaults")
+    user = _read_catalogue_file(path, "config") if os.path.exists(path) else {}
+    return _merge_config(defaults, user)
 
 
 def build_catalogue(cfg):

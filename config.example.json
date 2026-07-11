@@ -1,0 +1,31 @@
+{
+  "_說明": [
+    "這是範例檔，程式不會讀它（只讀 ~/.news-digest/config.json）。",
+    "要自訂時：把這個檔複製成 ~/.news-digest/config.json 再改。",
+    "  cp config.example.json ~/.news-digest/config.json",
+    "只需寫你要「新增或覆寫」的部分，內建的 11 個來源與 3 個分類會自動保留。",
+    "程式只讀 categories 與 feeds 兩個鍵，其餘（如本欄）一律忽略。"
+  ],
+
+  "categories": {
+    "ai": {
+      "label": "🧠 AI 動態",
+      "aliases": ["AI", "人工智慧", "生成式"],
+      "order": 25
+    }
+  },
+
+  "feeds": [
+    {
+      "_註": "全新來源：給 url + categories（會加進清單）",
+      "source": "Ars Technica AI",
+      "url": "https://arstechnica.com/ai/feed/",
+      "categories": ["ai", "tech"]
+    },
+    {
+      "_註": "既有來源多掛一個分類：用 add_categories 疊加，不覆寫原有分類",
+      "source": "iThome",
+      "add_categories": ["ai"]
+    }
+  ]
+}

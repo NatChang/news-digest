@@ -43,6 +43,12 @@ python3 fetch_feeds.py --days 7 --category all --format json
 
 ### 使用者自訂（推薦，不用碰 Python）
 
+> 第一次跑**不需要**這個檔 —— 內建 11 個來源開箱即用。想自訂時才建。
+> repo 附了範例 `config.example.json`，直接複製來改最快：
+> ```bash
+> cp config.example.json ~/.news-digest/config.json
+> ```
+
 在 `~/.news-digest/config.json` 寫你要新增/覆寫的部分即可（檔案不存在就自己建；跟 `seen.json` 同目錄）：
 
 ```json
@@ -65,9 +71,9 @@ python3 fetch_feeds.py --days 7 --category all --format json
 - 腳本會自動擋掉非 http(s) 的 URL 與不存在的分類，改完存檔即生效、不需重裝。
 - 更省事：直接跟 Claude 說「幫我加一個 AI 類別，來源用這兩個網址」，它會替你讀寫這個 JSON 並先驗證來源抓得到。
 
-### 內建預設（開發者）
+### 出廠預設（開發者）
 
-想改「出廠預設」的分類與來源，改 `fetch_feeds.py` 的 `_BUILTIN_CONFIG`（結構與上面的 JSON 相同）。一般使用者不需要動它。
+想改「出廠預設」的分類與來源（clone 出去會帶的那組），改 repo 內的 `default_feeds.json`（結構與上面的 user config 相同）。**`fetch_feeds.py` 裡不含任何訂閱**，純邏輯。一般使用者不需要動它，直接用 `~/.news-digest/config.json` 疊加自己的即可。
 
 **怎麼找一個網站的 RSS 網址**：頁尾/側欄常有「RSS / 訂閱」連結；或直接試 `/rss`、`/feed`、`/rss.xml`、`/atom.xml`、`/index.xml`。用瀏覽器打開，看到一堆 `<item>` / `<entry>` 的 XML 就對了。RSS 與 Atom 都支援。
 
