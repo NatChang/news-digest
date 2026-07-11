@@ -242,6 +242,8 @@ def main():
 
     # category -> source -> [items]
     result = {}
+    # (category, source) -> how many in-window items the per-source limit cut off
+    truncated = {}
     for source, url, cats in FEEDS:
         if cat != "all" and cat not in cats:
             continue
@@ -258,6 +260,7 @@ def main():
             if filter_seen and it["link"] and it["link"] in state:
                 continue
             kept.append(it)
+        cut = max(0, len(kept) - args.limit)
         kept = kept[: args.limit]
         if not kept:
             continue
@@ -265,6 +268,8 @@ def main():
         display_cats = cats if cat == "all" else [cat]
         primary = display_cats[0]
         result.setdefault(primary, {}).setdefault(source, []).extend(kept)
+        if cut:
+            truncated[(primary, source)] = truncated.get((primary, source), 0) + cut
 
     # Record everything we're about to show, then prune + persist.
     if record:
@@ -304,6 +309,10 @@ def main():
                 flag = "" if has_cjk(it["title"]) else "  [EN→需翻譯]"
                 link = it["link"] or ""
                 lines.append(f"- [{it['title']}]({link}) · {ds}{flag}")
+            cut = truncated.get((c, source))
+            if cut:
+                more = "再跑一次或加 --limit 可看到" if record else "加 --limit 可看到"
+                lines.append(f"_（尚有 {cut} 則未顯示，已達每來源 {args.limit} 則上限；{more}）_")
             lines.append("")
     if not any_out:
         if filter_seen:
