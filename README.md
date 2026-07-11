@@ -25,41 +25,49 @@ python3 fetch_feeds.py --days 7 --category all --format json
 | 參數 | 說明 | 預設 |
 |------|------|------|
 | `--days N` | 只收最近 N 天內發布的文章 | `1` |
-| `--category` | `invest` / `itproduct` / `tech` / `all`（也吃中文別名：投資、產品、技術…） | `all` |
+| `--category` | `invest` / `itproduct` / `tech` / `all` ＋任何自訂分類（也吃中英文別名：投資、產品、技術…） | `all` |
 | `--limit N` | 每個來源最多幾則 | `20` |
 | `--format` | `md` 或 `json` | `md` |
 | `--auto-unseen` | 當天第一次跑列全部，同一天再跑只列新的；隔天回到全部 | 關閉 |
 | `--unseen` | 一律只列先前沒顯示過的文章（連當天第一次也過濾） | 關閉 |
 | `--state PATH` | 已看清單存放位置 | `~/.news-digest/seen.json` |
+| `--config PATH` | 使用者自訂分類/來源設定檔 | `~/.news-digest/config.json` |
 
 **去重機制**：加了 `--auto-unseen` 或 `--unseen` 時，每次會把列出的文章連結記到 `~/.news-digest/seen.json`，之後跳過已記住的。這個檔在**家目錄、不在 repo 裡**（不會被 commit），只存連結與時間、保留近 14 天後自動修剪，不會無限膨脹。想重置已看記錄就刪掉它。兩種模式的差別與 Claude 何時自動帶 `--auto-unseen`，見 `SKILL.md`。
 
 直接跑腳本時，英文標題會保留 `[EN→需翻譯]` 標記（透過 Claude 使用才會翻成中文）。
 
-## 加入 / 修改 feed 來源 ⭐
+## 加入 / 修改 分類與 feed 來源 ⭐
 
-所有來源集中在 `fetch_feeds.py` 最上方的 `FEEDS` 清單，每一筆是：
+分兩層：**內建預設**（開發者維護）＋**使用者自訂**（你自己的）。啟動時後者疊加到前者，欄位級合併。
 
-```python
-("來源顯示名稱", "RSS_URL", [分類...]),
+### 使用者自訂（推薦，不用碰 Python）
+
+在 `~/.news-digest/config.json` 寫你要新增/覆寫的部分即可（檔案不存在就自己建；跟 `seen.json` 同目錄）：
+
+```json
+{
+  "categories": {
+    "ai": { "label": "🧠 AI 動態", "aliases": ["AI", "人工智慧", "生成式"], "order": 25 }
+  },
+  "feeds": [
+    { "source": "Ars Technica AI", "url": "https://arstechnica.com/ai/feed/", "categories": ["ai", "tech"] },
+    { "source": "iThome", "add_categories": ["ai"] }
+  ]
+}
 ```
 
-- **來源顯示名稱**：顯示在輸出的 `### 標題` 上，隨你取。
-- **RSS_URL**：該來源的 RSS / Atom feed 網址（不是網站首頁）。
-- **分類清單**：一或多個，值只能是 `"invest"`、`"itproduct"`、`"tech"`；同一個 feed 可同時屬多個分類。
+- `categories.<鍵>`：`label` 顯示標題（建議帶 emoji）、`aliases` 中英文別名（讓口語能對應）、`order` 排序數字（越小越前）。
+- `feeds[]` 以 `source` 名稱為合併鍵：
+  - **全新來源** → 給 `url` + `categories`（會 append）。
+  - **既有來源多掛類別** → 給 `add_categories`（疊加，不覆寫原有類別）。
+  - **既有來源改類別/網址** → 給 `categories` / `url`（覆寫）。
+- 腳本會自動擋掉非 http(s) 的 URL 與不存在的分類，改完存檔即生效、不需重裝。
+- 更省事：直接跟 Claude 說「幫我加一個 AI 類別，來源用這兩個網址」，它會替你讀寫這個 JSON 並先驗證來源抓得到。
 
-範例——新增科技來源、並把某來源同時歸到投資與技術：
+### 內建預設（開發者）
 
-```python
-FEEDS = [
-    # ...既有項目...
-    ("Hacker News",   "https://news.ycombinator.com/rss",   ["tech"]),
-    ("Ars Technica",  "https://feeds.arstechnica.com/arstechnica/index", ["itproduct", "tech"]),
-    ("某財經科技站",  "https://example.com/feed",            ["invest", "tech"]),
-]
-```
-
-改完存檔即可，不需重新安裝。分類鍵與分類標題文字可在 `CATEGORY_LABELS` 調整；要整組換成非中文/其他主題，清空 `FEEDS` 重填即可。
+想改「出廠預設」的分類與來源，改 `fetch_feeds.py` 的 `_BUILTIN_CONFIG`（結構與上面的 JSON 相同）。一般使用者不需要動它。
 
 **怎麼找一個網站的 RSS 網址**：頁尾/側欄常有「RSS / 訂閱」連結；或直接試 `/rss`、`/feed`、`/rss.xml`、`/atom.xml`、`/index.xml`。用瀏覽器打開，看到一堆 `<item>` / `<entry>` 的 XML 就對了。RSS 與 Atom 都支援。
 
