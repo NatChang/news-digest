@@ -108,10 +108,15 @@ def has_cjk(s):
     return bool(re.search(r"[一-鿿]", s))
 
 
-# feed 標題是不可信輸入：含 [ ] 時可截斷 Markdown 連結語法、偽造連結目標
-# （前面再加 ! 即成自動載入的圖片）。換成全形括號保留可讀性但無語法效果。
+# feed 標題是不可信輸入，需中和三種 Markdown 注入：
+#  1. 內部換行/tab：可長出假標題(##)、假項目(-)、分隔線(---)或裸 URL 自動連結，
+#     繞過下方的括號跳脫與連結白名單，故先把所有空白收斂成單一空格。
+#  2. [ ]：可截斷 Markdown 連結語法、偽造連結目標（前面再加 ! 即自動載入圖片）。
+#  3. < >：autolink 與寬鬆算繪器的原始 HTML。換成全形字保留可讀性但無語法效果。
 def md_safe_title(s):
-    return s.replace("[", "［").replace("]", "］")
+    s = re.sub(r"\s+", " ", s).strip()
+    return (s.replace("[", "［").replace("]", "］")
+             .replace("<", "＜").replace(">", "＞"))
 
 
 # Storm 風傳媒 RSS gives links like https://www.storm.mg/12345?utm_source=rss
@@ -317,8 +322,9 @@ def main():
                 d = it["published"]
                 ds = d.astimezone().strftime("%m/%d %H:%M") if d else "—"
                 flag = "" if has_cjk(it["title"]) else "  [EN→需翻譯]"
-                # 連結中的 ) 與空白會提前終止 Markdown 的 (url)，需百分比編碼
-                link = (it["link"] or "").replace("(", "%28").replace(")", "%29").replace(" ", "%20")
+                # 連結中的 ) 與空白（含換行/tab）會提前終止 Markdown 的 (url)，需編碼
+                link = (it["link"] or "").replace("(", "%28").replace(")", "%29")
+                link = re.sub(r"\s", "%20", link)
                 lines.append(f"- [{md_safe_title(it['title'])}]({link}) · {ds}{flag}")
             cut = truncated.get((c, source))
             if cut:
