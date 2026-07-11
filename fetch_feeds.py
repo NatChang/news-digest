@@ -191,6 +191,11 @@ def parse_feed(raw):
     items = []
     if not raw:
         return items
+    # 不可信 XML：合法 RSS/Atom 不含 DTD/實體宣告，直接拒收以擋 billion-laughs
+    # 等實體爆炸類 DoS（零依賴，取代 defusedxml；殘餘僅 DoS，非資料外洩）
+    if b"<!DOCTYPE" in raw[:4096] or b"<!ENTITY" in raw:
+        sys.stderr.write("[parse skip] DTD/ENTITY not allowed\n")
+        return items
     try:
         root = ET.fromstring(raw)
     except ET.ParseError:
