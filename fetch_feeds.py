@@ -123,15 +123,20 @@ def load_config(path=DEFAULT_CONFIG_PATH):
     return _merge_config(defaults, user)
 
 
-def build_catalogue(cfg):
+def build_catalogue(cfg, lang="zh"):
     """Derive the runtime lookups from a merged config:
         feeds   -> [(source, url, [categories]), ...] with http(s)-only URLs
-        labels  -> {cat: display label}
+        labels  -> {cat: display label}  (uses label_en when lang == "en")
         aliases -> {alias(lowercased & original): canonical cat} (+ all)
         order   -> [cat, ...] sorted by each category's `order`
     """
     cats = cfg.get("categories", {})
-    labels = {k: (v.get("label") or k) for k, v in cats.items()}
+
+    def _label(spec, key):
+        if lang == "en":
+            return spec.get("label_en") or spec.get("label") or key
+        return spec.get("label") or key
+    labels = {k: _label(v, k) for k, v in cats.items()}
     order = sorted(cats.keys(), key=lambda k: cats[k].get("order", 1000))
 
     aliases = {"all": "all", "全部": "all"}
@@ -343,10 +348,44 @@ def parse_feed(raw):
     return items
 
 
+# Boilerplate strings per output language. The article titles themselves are
+# not translated here (that is the caller's job, guided by the [translate→LANG]
+# marker below); only the digest's own framing text is localized.
+_STRINGS = {
+    "zh": {
+        "title_24h":  "新聞摘要（最近 24 小時）",
+        "title_days": "新聞摘要（最近 {n} 天）",
+        "none_unseen": "沒有新文章（你沒看過的都看完了）。",
+        "none":        "此區間內沒有新文章。",
+        "more_record": "再跑一次或加 --limit 可看到",
+        "more":        "加 --limit 可看到",
+        "truncated":   "（尚有 {cut} 則未顯示，已達每來源 {limit} 則上限；{more}）",
+    },
+    "en": {
+        "title_24h":  "News Digest (last 24 hours)",
+        "title_days": "News Digest (last {n} days)",
+        "none_unseen": "No new items — you're all caught up.",
+        "none":        "No items in this window.",
+        "more_record": "run again or add --limit to see them",
+        "more":        "add --limit to see them",
+        "truncated":   "({cut} more hidden; per-source cap of {limit} reached; {more})",
+    },
+}
+
+
+def needs_translation(title, lang):
+    """Whether a title is NOT in the target language and should be translated.
+    zh target -> flag non-Chinese titles; en target -> flag Chinese titles."""
+    return (not has_cjk(title)) if lang == "zh" else has_cjk(title)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=1)
     ap.add_argument("--category", default="all")
+    ap.add_argument("--lang", default="zh", choices=["zh", "en"],
+                    help="output language for the digest's framing text and the "
+                         "translate marker (default: zh)")
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--format", default="md", choices=["md", "json"])
     ap.add_argument("--unseen", action="store_true",
@@ -359,7 +398,8 @@ def main():
                     help=f"path to the user categories/feeds config (default: {DEFAULT_CONFIG_PATH})")
     args = ap.parse_args()
 
-    feeds_cat, CATEGORY_LABELS, aliases, order = build_catalogue(load_config(args.config))
+    feeds_cat, CATEGORY_LABELS, aliases, order = build_catalogue(load_config(args.config), args.lang)
+    S = _STRINGS[args.lang]
 
     raw_cat = args.category.strip()
     cat = aliases.get(raw_cat.lower()) or aliases.get(raw_cat) or "all"
@@ -426,8 +466,8 @@ def main():
 
     # Markdown (category order comes from the merged config)
     lines = []
-    win = f"最近 {args.days} 天" if args.days != 1 else "最近 24 小時"
-    lines.append(f"# 新聞摘要（{win}）\n")
+    title = S["title_24h"] if args.days == 1 else S["title_days"].format(n=args.days)
+    lines.append(f"# {title}\n")
     any_out = False
     for c in order:
         if c not in result:
@@ -439,21 +479,18 @@ def main():
             for it in its:
                 d = it["published"]
                 ds = d.astimezone().strftime("%m/%d %H:%M") if d else "—"
-                flag = "" if has_cjk(it["title"]) else "  [EN→需翻譯]"
+                flag = f"  [translate→{args.lang}]" if needs_translation(it["title"], args.lang) else ""
                 # 連結中的 ) 與空白（含換行/tab）會提前終止 Markdown 的 (url)，需編碼
                 link = (it["link"] or "").replace("(", "%28").replace(")", "%29")
                 link = re.sub(r"\s", "%20", link)
                 lines.append(f"- [{md_safe_title(it['title'])}]({link}) · {ds}{flag}")
             cut = truncated.get((c, source))
             if cut:
-                more = "再跑一次或加 --limit 可看到" if record else "加 --limit 可看到"
-                lines.append(f"_（尚有 {cut} 則未顯示，已達每來源 {args.limit} 則上限；{more}）_")
+                more = S["more_record"] if record else S["more"]
+                lines.append("_" + S["truncated"].format(cut=cut, limit=args.limit, more=more) + "_")
             lines.append("")
     if not any_out:
-        if filter_seen:
-            lines.append("_沒有新文章（你沒看過的都看完了）。_")
-        else:
-            lines.append("_此區間內沒有新文章。_")
+        lines.append("_" + (S["none_unseen"] if filter_seen else S["none"]) + "_")
     print("\n".join(lines))
 
 
