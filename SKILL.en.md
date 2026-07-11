@@ -35,33 +35,30 @@ Map their intent to script arguments:
   - `--lang` controls the language of the script's framing text (section
     headings, boilerplate) and the direction of the translate marker (see the
     Translate step below); translating the titles themselves is still your job.
-- **De-duplication (default behavior)** → **always add `--auto-unseen`**
-  - Effect: the first run of a day lists the full set; later runs the same day
-    show only what's new since the last run; the first run of the next day
-    returns to the full list. The user doesn't need to ask for this.
+- **De-duplication (default behavior)** → **always add `--unseen`**
+  - Effect: **always lists only articles you haven't seen yet** (force-filters
+    regardless of same-day or across-day). The user doesn't need to ask for this.
   - It relies on `~/.news-digest/seen.json` to remember listed links (last 14
-    days, auto-pruned).
-- **Two override cases**:
+    days, auto-pruned). If there's nothing new, the script says "no new items".
+- **One override case**:
   - If the user explicitly says "everything / re-show / show the whole list
-    again / don't filter" → **do not** add `--auto-unseen` (nor `--unseen`);
-    list the full set.
-  - If the user explicitly says "only what I haven't seen / skip what I've seen"
-    → use `--unseen` (force filtering, even on the first run of the day).
+    again / don't filter" → **do not** add `--unseen` (nor `--auto-unseen`);
+    list the full set. This path neither reads nor writes `seen.json`, so the
+    full list can always be re-shown.
 
 Examples:
-- "Show me investing news from the last three days" → `--days 3 --category invest --auto-unseen`
-- "Latest tech releases" → `--days 1 --category tech --auto-unseen`
-- "Everything this week (all)" → `--days 7 --category all` (says "all", so omit)
-- "Show me again, only what I haven't seen" → `--days 1 --category all --unseen`
+- "Show me investing news from the last three days" → `--days 3 --category invest --unseen`
+- "Latest tech releases" → `--days 1 --category tech --unseen`
+- "Everything this week (all / re-show)" → `--days 7 --category all` (says "all", so omit the flag)
 
 ## Steps
 
 1. **Run the script** (use the `fetch_feeds.py` in this skill's directory):
    ```bash
-   python3 "<this skill's directory>/fetch_feeds.py" --days N --category CAT --auto-unseen [--lang en]
+   python3 "<this skill's directory>/fetch_feeds.py" --days N --category CAT --unseen [--lang en]
    ```
-   Add `--auto-unseen` by default (see de-dup note above; omit only when the user
-   explicitly says "all"); add `--lang en` when the user wants English. It emits
+   Add `--unseen` by default (see de-dup note above; omit only when the user
+   explicitly says "all / re-show"); add `--lang en` when the user wants English. It emits
    Markdown already grouped by category and source, each item with its source
    link and publish time. Titles marked `[translate→zh]` / `[translate→en]` are
    the ones that need translating into the target language.

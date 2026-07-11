@@ -34,7 +34,7 @@ python3 fetch_feeds.py --days 7 --category all --format json
 | `--state PATH` | 已看清單存放位置 | `~/.news-digest/seen.json` |
 | `--config PATH` | 使用者自訂分類/來源設定檔 | `~/.news-digest/config.json` |
 
-**去重機制**：加了 `--auto-unseen` 或 `--unseen` 時，每次會把列出的文章連結記到 `~/.news-digest/seen.json`，之後跳過已記住的。這個檔在**家目錄、不在 repo 裡**（不會被 commit），只存連結與時間、保留近 14 天後自動修剪，不會無限膨脹。想重置已看記錄就刪掉它。兩種模式的差別與 Claude 何時自動帶 `--auto-unseen`，見 `SKILL.md`。
+**去重機制**：加了 `--auto-unseen` 或 `--unseen` 時，每次會把列出的文章連結記到 `~/.news-digest/seen.json`，之後跳過已記住的。這個檔在**家目錄、不在 repo 裡**（不會被 commit），只存連結與時間、保留近 14 天後自動修剪，不會無限膨脹。想重置已看記錄就刪掉它。Claude 透過此 skill 呼叫時**預設帶 `--unseen`**（永遠只列沒看過的）；使用者說「全部／重看」時才改列完整清單。兩種模式的差別見 `SKILL.md`。
 
 直接跑腳本時，英文標題會保留 `[EN→需翻譯]` 標記（透過 Claude 使用才會翻成中文）。
 
