@@ -2,18 +2,25 @@
 """
 Fetch curated RSS feeds, filter by publish date, group by category/source.
 
-Output is Markdown intended to be post-processed by Claude (translate any
-non-Chinese titles to Chinese, then present). Each item already carries its
-original article link so it stays clickable.
+Emits Markdown (or JSON) for the caller to post-process — e.g. translate any
+non-Chinese titles before display. Each item carries its original article link
+so it stays clickable. Categories and feeds come from default_feeds.json plus
+an optional per-user ~/.news-digest/config.json (see load_config).
 
 Usage:
-    python3 fetch_feeds.py [--days N] [--category CAT] [--limit N] [--format md|json]
+    python3 fetch_feeds.py [--days N] [--category CAT] [--limit N]
+                           [--format md|json] [--unseen | --auto-unseen]
+                           [--state PATH] [--config PATH]
 
---days N       Include items published within the last N days (default: 1).
---category     One of: invest | itproduct | tech | all  (default: all).
-               Chinese aliases accepted: 投資 / 產業, IT / 產品, 技術 / 技術發表.
---limit N      Max items per source after date filtering (default: 20).
---format       md (default) or json.
+--days N        Include items published within the last N days (default: 1).
+--category      A category key or alias, or 'all' (default: all). Built-ins:
+                invest / itproduct / tech; users may define more in config.
+--limit N       Max items per source after date filtering (default: 20).
+--format        md (default) or json.
+--unseen        Show only links not shown in previous runs; records shown ones.
+--auto-unseen   First run of a day shows everything; later same-day runs only new.
+--state PATH    Seen-links state file (default: ~/.news-digest/seen.json).
+--config PATH   User categories/feeds overlay (default: ~/.news-digest/config.json).
 """
 import argparse
 import json
