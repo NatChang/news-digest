@@ -7,9 +7,9 @@
   ],
 
   "categories": {
-    "invest":    { "label": "📈 投資產業動態",   "order": 10, "aliases": ["投資", "產業", "財經"] },
-    "itproduct": { "label": "💻 IT 最新產品動態", "order": 20, "aliases": ["it", "產品", "product"] },
-    "tech":      { "label": "🔬 最新技術發表",     "order": 30, "aliases": ["技術", "技術發表", "科技"] }
+    "invest":    { "label": "📈 投資產業動態",   "label_en": "📈 Investing & Industry", "order": 10, "aliases": ["投資", "產業", "財經"] },
+    "itproduct": { "label": "💻 IT 最新產品動態", "label_en": "💻 IT Products",          "order": 20, "aliases": ["it", "產品", "product"] },
+    "tech":      { "label": "🔬 最新技術發表",     "label_en": "🔬 Tech & Releases",      "order": 30, "aliases": ["技術", "技術發表", "科技"] }
   },
 
   "feeds": [

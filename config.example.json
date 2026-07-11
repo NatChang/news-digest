@@ -10,6 +10,7 @@
   "categories": {
     "ai": {
       "label": "🧠 AI 動態",
+      "label_en": "🧠 AI",
       "aliases": ["AI", "人工智慧", "生成式"],
       "order": 25
     }

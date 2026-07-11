@@ -4,7 +4,7 @@
 
 > 在 Claude 對話輸入 `/news-digest` 即可使用，例如 `/news-digest 最近三天 投資`。
 >
-> **給 Claude 的操作指令**（自然語言參數怎麼解析、去重規則、輸出格式與翻譯步驟）都寫在 [`SKILL.md`](./SKILL.md)。本檔只寫**人**需要知道的：安裝、直接跑 CLI、以及怎麼改來源。
+> **給 Claude 的操作指令**（自然語言參數怎麼解析、去重規則、輸出格式與翻譯步驟）都寫在 [`SKILL.md`](./SKILL.md)（唯一生效檔；英文對照見 [`SKILL.en.md`](./SKILL.en.md)，僅供閱讀、runtime 不載入）。本檔只寫**人**需要知道的：安裝、直接跑 CLI、以及怎麼改來源。
 
 ## 需求與安裝
 
@@ -27,6 +27,7 @@ python3 fetch_feeds.py --days 7 --category all --format json
 | `--days N` | 只收最近 N 天內發布的文章 | `1` |
 | `--category` | `invest` / `itproduct` / `tech` / `all` ＋任何自訂分類（也吃中英文別名：投資、產品、技術…） | `all` |
 | `--limit N` | 每個來源最多幾則 | `20` |
+| `--lang` | 輸出語言 `zh` / `en`（框架文字與翻譯標記方向；標題翻譯由 Claude 完成）| `zh` |
 | `--format` | `md` 或 `json` | `md` |
 | `--auto-unseen` | 當天第一次跑列全部，同一天再跑只列新的；隔天回到全部 | 關閉 |
 | `--unseen` | 一律只列先前沒顯示過的文章（連當天第一次也過濾） | 關閉 |
@@ -63,7 +64,7 @@ python3 fetch_feeds.py --days 7 --category all --format json
 }
 ```
 
-- `categories.<鍵>`：`label` 顯示標題（建議帶 emoji）、`aliases` 中英文別名（讓口語能對應）、`order` 排序數字（越小越前）。
+- `categories.<鍵>`：`label` 顯示標題（建議帶 emoji）、`label_en` 選填（`--lang en` 時用；沒有則 fallback 回 `label`）、`aliases` 中英文別名（讓口語能對應）、`order` 排序數字（越小越前）。
 - `feeds[]` 以 `source` 名稱為合併鍵：
   - **全新來源** → 給 `url` + `categories`（會 append）。
   - **既有來源多掛類別** → 給 `add_categories`（疊加，不覆寫原有類別）。
