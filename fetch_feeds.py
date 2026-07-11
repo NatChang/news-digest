@@ -355,6 +355,8 @@ _STRINGS = {
     "zh": {
         "title_24h":  "新聞摘要（最近 24 小時）",
         "title_days": "新聞摘要（最近 {n} 天）",
+        "title_date": "新聞摘要（{d}）",
+        "title_range": "新聞摘要（{a} ～ {b}）",
         "none_unseen": "沒有新文章（你沒看過的都看完了）。",
         "none":        "此區間內沒有新文章。",
         "more_record": "再跑一次或加 --limit 可看到",
@@ -364,6 +366,8 @@ _STRINGS = {
     "en": {
         "title_24h":  "News Digest (last 24 hours)",
         "title_days": "News Digest (last {n} days)",
+        "title_date": "News Digest ({d})",
+        "title_range": "News Digest ({a} – {b})",
         "none_unseen": "No new items — you're all caught up.",
         "none":        "No items in this window.",
         "more_record": "run again or add --limit to see them",
@@ -379,9 +383,24 @@ def needs_translation(title, lang):
     return (not has_cjk(title)) if lang == "zh" else has_cjk(title)
 
 
+def _iso_date(s):
+    """argparse type: accept YYYY-MM-DD, return the (y, m, d) tuple."""
+    try:
+        dt = datetime.strptime(s.strip(), "%Y-%m-%d")
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid date {s!r}; expected YYYY-MM-DD")
+    return (dt.year, dt.month, dt.day)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=1)
+    ap.add_argument("--date", type=_iso_date,
+                    help="only a single local calendar day (YYYY-MM-DD); overrides --days")
+    ap.add_argument("--since", type=_iso_date,
+                    help="only items on/after this local day (YYYY-MM-DD); overrides --days")
+    ap.add_argument("--until", type=_iso_date,
+                    help="only items on/before this local day (YYYY-MM-DD); overrides --days")
     ap.add_argument("--category", default="all")
     ap.add_argument("--lang", default="zh", choices=["zh", "en"],
                     help="output language for the digest's framing text and the "
@@ -405,6 +424,27 @@ def main():
     cat = aliases.get(raw_cat.lower()) or aliases.get(raw_cat) or "all"
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
 
+    # Absolute date window (--date / --since / --until). When any is given it
+    # overrides the relative --days cutoff. Dates are read as LOCAL calendar
+    # days and converted to UTC bounds (published times are stored in UTC).
+    if args.date and (args.since or args.until):
+        ap.error("--date cannot be combined with --since/--until")
+    local_tz = datetime.now(timezone.utc).astimezone().tzinfo
+
+    def _day_start(ymd):
+        return datetime(ymd[0], ymd[1], ymd[2], tzinfo=local_tz).astimezone(timezone.utc)
+
+    start_dt = end_dt = None  # end_dt is exclusive
+    if args.date:
+        start_dt = _day_start(args.date)
+        end_dt = start_dt + timedelta(days=1)
+    else:
+        if args.since:
+            start_dt = _day_start(args.since)
+        if args.until:
+            end_dt = _day_start(args.until) + timedelta(days=1)
+    date_filter = start_dt is not None or end_dt is not None
+
     # record: whether to load/persist the seen-links state at all.
     # filter_seen: whether to actually hide already-seen articles this run.
     record = args.unseen or args.auto_unseen
@@ -423,7 +463,15 @@ def main():
         kept = []
         for it in items:
             d = it["published"]
-            if d is not None and d < cutoff:
+            if date_filter:
+                # a specific-day query only makes sense for dated items
+                if d is None:
+                    continue
+                if start_dt is not None and d < start_dt:
+                    continue
+                if end_dt is not None and d >= end_dt:
+                    continue
+            elif d is not None and d < cutoff:
                 continue
             if it["link"] and not it["link"].startswith("http"):
                 it["link"] = urljoin(url, it["link"])
@@ -466,7 +514,19 @@ def main():
 
     # Markdown (category order comes from the merged config)
     lines = []
-    title = S["title_24h"] if args.days == 1 else S["title_days"].format(n=args.days)
+    if date_filter:
+        def _fmt(ymd):
+            return f"{ymd[0]:04d}-{ymd[1]:02d}-{ymd[2]:02d}"
+        if args.date:
+            title = S["title_date"].format(d=_fmt(args.date))
+        else:
+            a = _fmt(args.since) if args.since else "…"
+            b = _fmt(args.until) if args.until else "…"
+            title = S["title_range"].format(a=a, b=b)
+    elif args.days == 1:
+        title = S["title_24h"]
+    else:
+        title = S["title_days"].format(n=args.days)
     lines.append(f"# {title}\n")
     any_out = False
     for c in order:

@@ -17,6 +17,21 @@ Map their intent to script arguments:
 - **Days** → `--days N` (default `1`)
   - "today / latest / 24h" → 1; "last three days / these few days" → 3;
     "this week" → 7; "N days ago" → N
+- **Specific date** → `--date YYYY-MM-DD` (single day) or `--since YYYY-MM-DD` /
+  `--until YYYY-MM-DD` (range)
+  - "the 11th / yesterday / last Wednesday" → resolve to an absolute date and
+    pass `--date`; "the 11th to the 12th" → `--since 2026-07-11 --until 2026-07-12`.
+    Dates are LOCAL calendar days and override `--days` (no need to also pass
+    `--days`). `--date` cannot be combined with `--since/--until`.
+  - ⚠️ **RSS only keeps a small window of recent items**: a date is only
+    fetchable while it's still within the source feed's current window (usually
+    the last few days); older dates return nothing — a data-source limit, not a
+    bug. If the user asks for an older date that yields nothing, say so plainly.
+  - **Interaction with de-dup**: a date query still applies the de-dup rule
+    (default `--unseen`) → it lists only unseen items from that day and records
+    them to `seen.json`, so they won't reappear next time. Only when the user
+    says "re-show that whole day / everything from that day" do you omit
+    `--unseen` and list the full day (nothing recorded).
 - **Category** → `--category CAT` (default `all`)
   - investing / industry / finance → `invest`
   - IT / products → `itproduct`

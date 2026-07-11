@@ -26,6 +26,9 @@ python3 fetch_feeds.py --days 7 --category all --format json
 |------|------|------|
 | `--days N` | 只收最近 N 天內發布的文章 | `1` |
 | `--category` | `invest` / `itproduct` / `tech` / `all` ＋任何自訂分類（也吃中英文別名：投資、產品、技術…） | `all` |
+| `--date YYYY-MM-DD` | 只看某一本地日曆日（覆寫 `--days`） | 關閉 |
+| `--since YYYY-MM-DD` | 只看該日（含）之後（覆寫 `--days`） | 關閉 |
+| `--until YYYY-MM-DD` | 只看該日（含）之前（覆寫 `--days`） | 關閉 |
 | `--limit N` | 每個來源最多幾則 | `20` |
 | `--lang` | 輸出語言 `zh` / `en`（框架文字與翻譯標記方向；標題翻譯由 Claude 完成）| `zh` |
 | `--format` | `md` 或 `json` | `md` |
@@ -33,6 +36,8 @@ python3 fetch_feeds.py --days 7 --category all --format json
 | `--unseen` | 一律只列先前沒顯示過的文章（連當天第一次也過濾） | 關閉 |
 | `--state PATH` | 已看清單存放位置 | `~/.news-digest/seen.json` |
 | `--config PATH` | 使用者自訂分類/來源設定檔 | `~/.news-digest/config.json` |
+
+**指定日期**：`--date`／`--since`／`--until` 以本地日曆日過濾，會覆寫 `--days`。注意 RSS 只提供最新的少量文章，**只有日期還落在來源當前視窗內（通常最近幾天）才抓得到**，較舊的日期沒有資料源可回溯。
 
 **去重機制**：加了 `--auto-unseen` 或 `--unseen` 時，每次會把列出的文章連結記到 `~/.news-digest/seen.json`，之後跳過已記住的。這個檔在**家目錄、不在 repo 裡**（不會被 commit），只存連結與時間、保留近 14 天後自動修剪，不會無限膨脹。想重置已看記錄就刪掉它。Claude 透過此 skill 呼叫時**預設帶 `--unseen`**（永遠只列沒看過的）；使用者說「全部／重看」時才改列完整清單。兩種模式的差別見 `SKILL.md`。
 
