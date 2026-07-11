@@ -26,38 +26,145 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin
 from xml.etree import ElementTree as ET
 
-# --- Feed catalogue -------------------------------------------------------
-# Each feed: (source_name, url, [categories]). A feed may belong to several.
-FEEDS = [
-    # 投資產業動態
-    ("Storm 風傳媒財經",   "https://www.storm.mg/api/getRss/channel_id/4",              ["invest"]),
-    ("鉅亨網 cnYES 台股",  "https://news.cnyes.com/rss/v1/news/category/tw_stock",       ["invest"]),
-    ("DIGITIMES Asia",     "https://www.digitimes.com/rss/daily.xml",                    ["invest", "tech"]),
-    ("SemiAnalysis",       "https://www.semianalysis.com/feed",                          ["invest", "tech"]),
-    ("綠角財經筆記",       "https://greenhornfinancefootnote.blogspot.com/feeds/posts/default", ["invest"]),
-    ("TechNews 科技新報",  "https://technews.tw/tn-rss/",                                ["invest", "tech"]),
-    # IT 最新產品動態
-    ("Engadget",           "https://www.engadget.com/rss.xml",                           ["itproduct"]),
-    ("The Verge",          "https://www.theverge.com/rss/index.xml",                     ["itproduct"]),
-    ("iThome",             "https://www.ithome.com.tw/rss",                              ["itproduct", "tech"]),
-    ("電腦玩物",           "https://feeds.feedburner.com/playpcesor",                    ["itproduct"]),
-    # 最新技術發表
-    ("TechBridge 技術共筆", "https://blog.techbridge.cc/atom.xml",                       ["tech"]),
-    ("Linux Journal",      "https://www.linuxjournal.com/node/feed",                     ["tech"]),
-]
-
-CATEGORY_LABELS = {
-    "invest":    "📈 投資產業動態",
-    "itproduct": "💻 IT 最新產品動態",
-    "tech":      "🔬 最新技術發表",
+# --- Feed catalogue (built-in defaults) -----------------------------------
+# Source of truth for the shipped defaults. Users DO NOT edit this — they add
+# or override categories/feeds in ~/.news-digest/config.json (see load_config).
+# Schema mirrors that user config so the two merge cleanly.
+_BUILTIN_CONFIG = {
+    "categories": {
+        # key -> {label, order, aliases}. `order` sets display order (low first).
+        "invest":    {"label": "📈 投資產業動態", "order": 10, "aliases": ["投資", "產業", "財經"]},
+        "itproduct": {"label": "💻 IT 最新產品動態", "order": 20, "aliases": ["it", "產品", "product"]},
+        "tech":      {"label": "🔬 最新技術發表", "order": 30, "aliases": ["技術", "技術發表", "科技"]},
+    },
+    "feeds": [
+        # 投資產業動態
+        {"source": "Storm 風傳媒財經",  "url": "https://www.storm.mg/api/getRss/channel_id/4",        "categories": ["invest"]},
+        {"source": "鉅亨網 cnYES 台股", "url": "https://news.cnyes.com/rss/v1/news/category/tw_stock", "categories": ["invest"]},
+        {"source": "DIGITIMES Asia",    "url": "https://www.digitimes.com/rss/daily.xml",             "categories": ["invest", "tech"]},
+        {"source": "SemiAnalysis",      "url": "https://www.semianalysis.com/feed",                   "categories": ["invest", "tech"]},
+        {"source": "TechNews 科技新報", "url": "https://technews.tw/tn-rss/",                         "categories": ["invest", "tech"]},
+        # IT 最新產品動態
+        {"source": "Engadget",          "url": "https://www.engadget.com/rss.xml",                    "categories": ["itproduct"]},
+        {"source": "The Verge",         "url": "https://www.theverge.com/rss/index.xml",              "categories": ["itproduct"]},
+        {"source": "iThome",            "url": "https://www.ithome.com.tw/rss",                       "categories": ["itproduct", "tech"]},
+        {"source": "電腦玩物",          "url": "https://feeds.feedburner.com/playpcesor",             "categories": ["itproduct"]},
+        # 最新技術發表
+        {"source": "TechBridge 技術共筆", "url": "https://blog.techbridge.cc/atom.xml",               "categories": ["tech"]},
+        {"source": "Linux Journal",     "url": "https://www.linuxjournal.com/node/feed",              "categories": ["tech"]},
+    ],
 }
 
-CATEGORY_ALIASES = {
-    "invest": "invest", "投資": "invest", "產業": "invest", "財經": "invest",
-    "itproduct": "itproduct", "it": "itproduct", "產品": "itproduct", "product": "itproduct",
-    "tech": "tech", "技術": "tech", "技術發表": "tech", "科技": "tech",
-    "all": "all", "全部": "all",
-}
+# Where users define their own categories/feeds (JSON, zero extra deps).
+DEFAULT_CONFIG_PATH = os.path.expanduser("~/.news-digest/config.json")
+
+
+def _merge_config(base, user):
+    """Overlay a user config dict onto the built-in defaults.
+
+    categories: shallow dict merge; a user key with the same name overrides
+        (or extends) the built-in one field by field.
+    feeds: matched by `source` name.
+        - new source (has url + categories)         -> appended
+        - existing source with "categories"          -> replaces its categories
+        - existing source with "add_categories"      -> appends those categories
+        - a user feed may itself use add_categories on a brand-new source, which
+          is treated as its category list.
+    Untrusted values (labels/urls) are validated later where they are used.
+    """
+    merged = {
+        "categories": dict(base.get("categories", {})),
+        "feeds": [dict(f) for f in base.get("feeds", [])],
+    }
+    # categories: field-by-field overlay
+    for key, spec in (user.get("categories") or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        merged["categories"][key] = {**merged["categories"].get(key, {}), **spec}
+
+    by_source = {f["source"]: f for f in merged["feeds"]}
+    for uf in (user.get("feeds") or []):
+        src = uf.get("source")
+        if not src:
+            continue
+        existing = by_source.get(src)
+        add = uf.get("add_categories")
+        if existing is not None:
+            if add:
+                cats = list(existing.get("categories", []))
+                for c in add:
+                    if c not in cats:
+                        cats.append(c)
+                existing["categories"] = cats
+            if uf.get("categories"):
+                existing["categories"] = list(uf["categories"])
+            if uf.get("url"):
+                existing["url"] = uf["url"]
+        else:
+            cats = list(uf.get("categories") or add or [])
+            if uf.get("url") and cats:
+                nf = {"source": src, "url": uf["url"], "categories": cats}
+                merged["feeds"].append(nf)
+                by_source[src] = nf
+    return merged
+
+
+def load_config(path=DEFAULT_CONFIG_PATH):
+    """Return the merged (built-in + user) config. Never raises: a missing or
+    malformed user config just falls back to the built-in defaults with a
+    warning, so the skill keeps working."""
+    user = {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            user = data
+        else:
+            sys.stderr.write(f"[config] {path}: top level must be an object; ignored\n")
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        sys.stderr.write(f"[config] {path}: {e}; using built-in defaults\n")
+    return _merge_config(_BUILTIN_CONFIG, user)
+
+
+def build_catalogue(cfg):
+    """Derive the runtime lookups from a merged config:
+        feeds   -> [(source, url, [categories]), ...] with http(s)-only URLs
+        labels  -> {cat: display label}
+        aliases -> {alias(lowercased & original): canonical cat} (+ all)
+        order   -> [cat, ...] sorted by each category's `order`
+    """
+    cats = cfg.get("categories", {})
+    labels = {k: (v.get("label") or k) for k, v in cats.items()}
+    order = sorted(cats.keys(), key=lambda k: cats[k].get("order", 1000))
+
+    aliases = {"all": "all", "全部": "all"}
+    for key, spec in cats.items():
+        aliases[key] = key
+        aliases[key.lower()] = key
+        for a in (spec.get("aliases") or []):
+            if not isinstance(a, str):
+                continue
+            aliases[a] = key
+            aliases[a.lower()] = key
+
+    feeds = []
+    for f in cfg.get("feeds", []):
+        src, url, fcats = f.get("source"), f.get("url"), f.get("categories")
+        if not (src and url and fcats):
+            continue
+        # untrusted URL: only fetch http(s)
+        if not str(url).startswith(("http://", "https://")):
+            sys.stderr.write(f"[config] feed {src!r}: non-http(s) url skipped\n")
+            continue
+        # keep only categories that actually exist, preserving order
+        valid = [c for c in fcats if c in cats]
+        if not valid:
+            sys.stderr.write(f"[config] feed {src!r}: no known category, skipped\n")
+            continue
+        feeds.append((src, url, valid))
+    return feeds, labels, aliases, order
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
@@ -244,11 +351,14 @@ def main():
                     help="first run of the day shows everything; later runs the same day show only new ones")
     ap.add_argument("--state", default=DEFAULT_STATE,
                     help=f"path to the seen-links state file (default: {DEFAULT_STATE})")
+    ap.add_argument("--config", default=DEFAULT_CONFIG_PATH,
+                    help=f"path to the user categories/feeds config (default: {DEFAULT_CONFIG_PATH})")
     args = ap.parse_args()
 
-    cat = CATEGORY_ALIASES.get(args.category.strip().lower(), None)
-    if cat is None:
-        cat = CATEGORY_ALIASES.get(args.category.strip(), "all")
+    feeds_cat, CATEGORY_LABELS, aliases, order = build_catalogue(load_config(args.config))
+
+    raw_cat = args.category.strip()
+    cat = aliases.get(raw_cat.lower()) or aliases.get(raw_cat) or "all"
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
 
     # record: whether to load/persist the seen-links state at all.
@@ -261,7 +371,7 @@ def main():
     result = {}
     # (category, source) -> how many in-window items the per-source limit cut off
     truncated = {}
-    for source, url, cats in FEEDS:
+    for source, url, cats in feeds_cat:
         if cat != "all" and cat not in cats:
             continue
         raw = fetch(url)
@@ -310,8 +420,7 @@ def main():
         print(json.dumps(serial, ensure_ascii=False, indent=2))
         return
 
-    # Markdown
-    order = ["invest", "itproduct", "tech"]
+    # Markdown (category order comes from the merged config)
     lines = []
     win = f"最近 {args.days} 天" if args.days != 1 else "最近 24 小時"
     lines.append(f"# 新聞摘要（{win}）\n")
