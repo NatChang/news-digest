@@ -1,0 +1,22 @@
+{
+  "_說明": [
+    "出廠預設的分類與來源（此檔會進 git，clone 出去即帶這組）。",
+    "刻意保持中性、大眾取向；個人化/niche 訂閱請放各自的 ~/.news-digest/config.json。",
+    "程式只讀 categories 與 feeds 兩個鍵，其餘（如本欄）忽略。",
+    "改這個檔就能調整出廠預設，不需動 fetch_feeds.py。"
+  ],
+
+  "categories": {
+    "invest":    { "label": "📈 投資產業動態",   "order": 10, "aliases": ["投資", "產業", "財經"] },
+    "itproduct": { "label": "💻 IT 最新產品動態", "order": 20, "aliases": ["it", "產品", "product"] },
+    "tech":      { "label": "🔬 最新技術發表",     "order": 30, "aliases": ["技術", "技術發表", "科技"] }
+  },
+
+  "feeds": [
+    { "source": "鉅亨網 cnYES 台股", "url": "https://news.cnyes.com/rss/v1/news/category/tw_stock", "categories": ["invest"] },
+    { "source": "TechNews 科技新報", "url": "https://technews.tw/tn-rss/",              "categories": ["invest", "tech"] },
+    { "source": "Engadget",          "url": "https://www.engadget.com/rss.xml",          "categories": ["itproduct"] },
+    { "source": "The Verge",         "url": "https://www.theverge.com/rss/index.xml",     "categories": ["itproduct"] },
+    { "source": "iThome",            "url": "https://www.ithome.com.tw/rss",              "categories": ["itproduct", "tech"] }
+  ]
+}
