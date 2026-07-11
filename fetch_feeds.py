@@ -138,6 +138,7 @@ def build_catalogue(cfg):
             aliases[a.lower()] = key
 
     feeds = []
+    seen_urls = {}  # normalized url -> source name that claimed it first
     for f in cfg.get("feeds", []):
         src, url, fcats = f.get("source"), f.get("url"), f.get("categories")
         if not (src and url and fcats):
@@ -146,11 +147,19 @@ def build_catalogue(cfg):
         if not str(url).startswith(("http://", "https://")):
             sys.stderr.write(f"[config] feed {src!r}: non-http(s) url skipped\n")
             continue
+        # de-dup by URL so the same feed under two different source names can't
+        # surface the same articles twice (merge only de-dups by source name).
+        norm = str(url).strip().rstrip("/")
+        if norm in seen_urls:
+            sys.stderr.write(
+                f"[config] feed {src!r}: same url as {seen_urls[norm]!r}; skipped as duplicate\n")
+            continue
         # keep only categories that actually exist, preserving order
         valid = [c for c in fcats if c in cats]
         if not valid:
             sys.stderr.write(f"[config] feed {src!r}: no known category, skipped\n")
             continue
+        seen_urls[norm] = src
         feeds.append((src, url, valid))
     return feeds, labels, aliases, order
 
