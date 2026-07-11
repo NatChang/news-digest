@@ -66,6 +66,7 @@ def fetch(url, timeout=20):
     try:
         out = subprocess.run(
             ["curl", "-sL", "-m", str(timeout), "-A", UA,
+             "--max-filesize", "10m", "--max-redirs", "3",
              "-H", "Accept: application/rss+xml, application/atom+xml, application/xml, text/xml",
              url],
             capture_output=True, timeout=timeout + 5,
