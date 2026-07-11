@@ -163,6 +163,17 @@ def save_state(path, state):
         sys.stderr.write(f"[state save fail] {path}: {e}\n")
 
 
+def ran_today(path):
+    """True if the state file was last written earlier today (local date).
+    Used by --auto-unseen: the first run of a day shows everything, later
+    runs the same day show only new articles."""
+    try:
+        last = datetime.fromtimestamp(os.path.getmtime(path)).date()
+        return last == datetime.now().date()
+    except OSError:
+        return False
+
+
 def parse_feed(raw):
     """Return list of dicts: title, link, published(datetime|None)."""
     items = []
@@ -211,7 +222,9 @@ def main():
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--format", default="md", choices=["md", "json"])
     ap.add_argument("--unseen", action="store_true",
-                    help="only show articles not shown in previous runs; records shown ones")
+                    help="always show only articles not shown in previous runs; records shown ones")
+    ap.add_argument("--auto-unseen", action="store_true",
+                    help="first run of the day shows everything; later runs the same day show only new ones")
     ap.add_argument("--state", default=DEFAULT_STATE,
                     help=f"path to the seen-links state file (default: {DEFAULT_STATE})")
     args = ap.parse_args()
@@ -220,7 +233,12 @@ def main():
     if cat is None:
         cat = CATEGORY_ALIASES.get(args.category.strip(), "all")
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
-    state = load_state(args.state) if args.unseen else {}
+
+    # record: whether to load/persist the seen-links state at all.
+    # filter_seen: whether to actually hide already-seen articles this run.
+    record = args.unseen or args.auto_unseen
+    filter_seen = args.unseen or (args.auto_unseen and ran_today(args.state))
+    state = load_state(args.state) if record else {}
 
     # category -> source -> [items]
     result = {}
@@ -237,7 +255,7 @@ def main():
             if it["link"] and not it["link"].startswith("http"):
                 it["link"] = urljoin(url, it["link"])
             it["link"] = normalize_link(it["link"])
-            if args.unseen and it["link"] and it["link"] in state:
+            if filter_seen and it["link"] and it["link"] in state:
                 continue
             kept.append(it)
         kept = kept[: args.limit]
@@ -249,7 +267,7 @@ def main():
         result.setdefault(primary, {}).setdefault(source, []).extend(kept)
 
     # Record everything we're about to show, then prune + persist.
-    if args.unseen:
+    if record:
         now = datetime.now(timezone.utc).isoformat()
         for srcs in result.values():
             for its in srcs.values():
@@ -288,7 +306,7 @@ def main():
                 lines.append(f"- [{it['title']}]({link}) · {ds}{flag}")
             lines.append("")
     if not any_out:
-        if args.unseen:
+        if filter_seen:
             lines.append("_沒有新文章（你沒看過的都看完了）。_")
         else:
             lines.append("_此區間內沒有新文章。_")

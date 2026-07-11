@@ -37,22 +37,26 @@ python3 fetch_feeds.py --days 7 --category all --format json
 | `--category` | `invest` / `itproduct` / `tech` / `all`（也吃中文別名：投資、產品、技術…） | `all` |
 | `--limit N` | 每個來源最多幾則 | `20` |
 | `--format` | `md` 或 `json` | `md` |
-| `--unseen` | 只列出先前沒顯示過的文章，並記住這次列出的 | 關閉 |
-| `--state PATH` | `--unseen` 的已看清單存放位置 | `~/.news-digest/seen.json` |
+| `--auto-unseen` | 當天第一次跑列全部，同一天再跑只列新的；隔天回到全部 | 關閉 |
+| `--unseen` | 一律只列出先前沒顯示過的文章（連當天第一次也過濾） | 關閉 |
+| `--state PATH` | 已看清單存放位置 | `~/.news-digest/seen.json` |
 
-### 只看沒看過的（`--unseen`）
+### 只看沒看過的（去重）
 
-同一天想多跑幾次、只想看新增的文章時加上 `--unseen`：
+有兩種模式，差別在「當天第一次跑」要不要過濾：
 
 ```bash
-python3 fetch_feeds.py --days 1 --unseen      # 第一次：列出全部並記住
-python3 fetch_feeds.py --days 1 --unseen      # 再跑：只列出上次之後的新文章
+# 智慧模式：一天內第一次列全部，之後同一天只列新增，隔天又回到全部
+python3 fetch_feeds.py --days 1 --auto-unseen
+
+# 強制模式：每次都只列出沒看過的（連當天第一次也過濾）
+python3 fetch_feeds.py --days 1 --unseen
 ```
 
-運作方式：每次會把「這次列出的文章連結」記到 `~/.news-digest/seen.json`（可用 `--state` 改路徑），下次跑就跳過已記住的。清單只保留最近 14 天、會自動清掉更舊的，不會無限膨脹。
+運作方式：每次會把「這次列出的文章連結」記到 `~/.news-digest/seen.json`（可用 `--state` 改路徑），之後跳過已記住的。`--auto-unseen` 額外用**狀態檔的最後修改日期**判斷今天是否已經跑過。清單只保留最近 14 天、自動清掉更舊的，不會無限膨脹。
 
 - 這個檔案存在你**家目錄下、不在 repo 裡**，所以不會被 commit，也不會把你的閱讀記錄推上 git。
-- 不加 `--unseen` 時行為完全不變，也不會建立任何狀態檔。
+- 兩個旗標都不加時行為完全不變，也不會建立任何狀態檔。
 - 想重置「已看過」記錄，直接刪掉 `~/.news-digest/seen.json` 即可。
 
 輸出的 Markdown 中，標了 `[EN→需翻譯]` 的是英文標題，交給 Claude 這一步會翻成中文；直接跑腳本則會保留標記。
