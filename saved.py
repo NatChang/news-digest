@@ -18,6 +18,7 @@ Usage:
     saved.py drop <n|url> [...]      # remove entirely
     saved.py purge                   # drop every item already marked read
     saved.py --store PATH ...        # override the store location
+    saved.py --version               # print the version and exit
 
 <n> is the number shown by `list` — it indexes the DEFAULT (unread) view, so
 run `list` first if you are unsure. A URL (or a unique substring of one) also
@@ -29,6 +30,8 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
+
+from _version import __version__
 
 # Reuse the digest's Markdown-injection neutralizers: titles AND links here come
 # from the same untrusted feeds and land in the same kind of Markdown list, so
@@ -144,6 +147,8 @@ def fmt_md(store, include_read):
 
 def main():
     ap = argparse.ArgumentParser(description="Read-later list for the news digest")
+    ap.add_argument("--version", action="version",
+                    version=f"news-digest {__version__}")
     ap.add_argument("--store", default=DEFAULT_STORE)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
