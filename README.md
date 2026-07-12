@@ -135,7 +135,7 @@ python3 test_security.py     # 有防線被破壞會以非零狀態結束
 
 `ptt_hot.py` 也算在內：PTT 的標題與連結同樣是攻擊者可控的外部輸入，它直接重用 `fetch_feeds.py` 的 `md_safe_title` / `md_safe_link`（刻意不另寫一份），所以那組防線一破，PTT 輸出跟著中槍。
 
-CI（`.github/workflows/test.yml`）只在**每個 PR** 與**推上 `main`** 時跑——**直接 push 到 `beta` 不會觸發 CI**。在這個分支上工作時，本機這一步就是唯一的把關。
+推上 GitHub 時 CI 也會自動跑（`.github/workflows/test.yml`：每個 PR，以及推上 `main` 或 `beta`）。本機先跑只是為了不用等 CI 才發現。
 
 feed 給的**標題、連結、XML 本身都是攻擊者可控的**，而它們最後會變成你會點的 Markdown、以及 Claude 讀進去的上下文。`test_security.py` 拿惡意輸入去打真正的函式，驗證這些防線還在：DTD／實體爆炸與 XXE 一律拒收、標題不能偽造標題列或連結、`javascript:`／`data:`／`file:` 不會變成可點連結、連結裡的 `)` 與空白會被編碼（否則會提前關掉 `(url)`，讓後面的殘字變成注入連結）、`mute` 只做子字串比對而不是 regex。
 
