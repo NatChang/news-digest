@@ -1,0 +1,18 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The scripts target the system python and the standard library only,
+          # so the oldest version README promises is the one worth proving.
+          python-version: "3.9"
+      - run: python3 test_security.py
