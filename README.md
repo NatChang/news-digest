@@ -91,6 +91,8 @@ python3 fetch_feeds.py --days 7 --category all --format json
 python3 test_security.py     # 有防線被破壞會以非零狀態結束
 ```
 
+推上 GitHub 時 CI 也會自動跑（`.github/workflows/test.yml`，每個 PR 與推上 `main` 時）。本機先跑只是為了不用等 CI 才發現。
+
 feed 給的**標題、連結、XML 本身都是攻擊者可控的**，而它們最後會變成你會點的 Markdown、以及 Claude 讀進去的上下文。`test_security.py` 拿惡意輸入去打真正的函式，驗證這些防線還在：DTD／實體爆炸與 XXE 一律拒收、標題不能偽造標題列或連結、`javascript:`／`data:`／`file:` 不會變成可點連結、連結裡的 `)` 與空白會被編碼（否則會提前關掉 `(url)`，讓後面的殘字變成注入連結）、`mute` 只做子字串比對而不是 regex。
 
 會有這個檔，是因為**光用讀的不夠**：連結消毒的規則曾經在兩支腳本間悄悄分岔（一邊編碼了括號與空白，另一邊只編碼括號），把 `md_safe_title` 本來要堵的注入洞重新打開；那個 bug 讀 code 沒看出來，寫測試去打它才現形。
