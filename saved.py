@@ -30,16 +30,22 @@ import re
 import sys
 from datetime import datetime, timezone
 
-# Reuse the digest's Markdown-injection neutralizer: feed titles are untrusted
-# input and land in the same kind of Markdown list here as they do there.
+# Reuse the digest's Markdown-injection neutralizers: titles AND links here come
+# from the same untrusted feeds and land in the same kind of Markdown list, so
+# they must be sanitized identically. Import rather than re-implement — a second
+# copy is how the two drift apart and one of them silently loses a rule.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from fetch_feeds import md_safe_title
+    from fetch_feeds import md_safe_title, md_safe_link
 except Exception:  # keep working even if the sibling module moves
     def md_safe_title(s):
         s = re.sub(r"\s+", " ", s).strip()
         return (s.replace("[", "［").replace("]", "］")
                  .replace("<", "＜").replace(">", "＞"))
+
+    def md_safe_link(link):
+        link = (link or "").replace("(", "%28").replace(")", "%29")
+        return re.sub(r"\s", "%20", link)
 
 DEFAULT_STORE = os.path.expanduser("~/.news-digest/saved.json")
 
@@ -60,10 +66,11 @@ def load(path):
 def save(path, store):
     d = os.path.dirname(path)
     if d:
-        os.makedirs(d, exist_ok=True)
+        os.makedirs(d, mode=0o700, exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(store, f, ensure_ascii=False, indent=1)
+    os.chmod(tmp, 0o600)  # owner-only: what you plan to read is private
     os.replace(tmp, path)  # atomic: a crash mid-write can't truncate the store
 
 
@@ -126,9 +133,9 @@ def fmt_md(store, include_read):
     lines.append(f"_未讀 {unread} 篇" + (f"，已讀 {len(ordered) - unread} 篇_" if include_read else "_") + "\n")
     for n, (link, v) in enumerate(ordered, 1):
         mark = "✅ " if v.get("read_at") else ""
-        meta = " · ".join(x for x in (v.get("source"), (v.get("published") or "")[:16].replace("T", " ")) if x)
-        safe = (link or "").replace("(", "%28").replace(")", "%29")
-        lines.append(f"{n}. {mark}[{md_safe_title(v.get('title', ''))}]({safe})"
+        meta = " · ".join(md_safe_title(x) for x in
+                          (v.get("source"), (v.get("published") or "")[:16].replace("T", " ")) if x)
+        lines.append(f"{n}. {mark}[{md_safe_title(v.get('title', ''))}]({md_safe_link(link)})"
                      + (f" · {meta}" if meta else ""))
         if v.get("note"):
             lines.append(f"   ↳ _{md_safe_title(v['note'])}_")
