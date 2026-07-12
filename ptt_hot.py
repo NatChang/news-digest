@@ -37,7 +37,9 @@ NOISE = [
 
 # 列表頁的推文數欄位：100 以上一律顯示「爆」，看不到實際數字；
 # 破百的因此無法互相排序，這是 PTT 的顯示限制，不是解析漏抓。
+# 噓文同理，只給十位數：X0=噓1–9、X5=噓50–59、XX=噓100 以上。
 BLOWN = "爆"
+BOOED = "XX"
 
 # 小板流量遠低於八卦/股板，用預設 100 幾乎撈不到東西，故各自降門檻。
 # 只在使用者沒指定 --min-rec 時套用。
@@ -90,14 +92,30 @@ def parse(html, board):
     return out
 
 
-def rec_sort_key(rec):
-    """「爆」排最前，其餘按數字大小。"""
+def rec_score(rec):
+    """把列表頁的推文欄轉成可排序的數值；噓為負，「爆」「XX」給破表值。"""
     if rec == BLOWN:
         return 10_000
+    if rec == BOOED:
+        return -10_000
+    if rec.startswith("X") and rec[1:].isdigit():
+        return -10 * int(rec[1:])
     try:
         return int(rec)
     except ValueError:
-        return -1  # 「X1」等噓文標記
+        return 0
+
+
+def rec_label(rec):
+    """人看的推/噓數。PTT 只給區間，就照實印區間，別假裝有精確值。"""
+    if rec == BLOWN:
+        return "爆(推≥100)"
+    if rec == BOOED:
+        return "噓≥100"
+    if rec.startswith("X") and rec[1:].isdigit():
+        d = int(rec[1:])
+        return "噓1–9" if d == 0 else f"噓{d * 10}–{d * 10 + 9}"
+    return f"{rec}推"
 
 
 def load_seen():
@@ -136,6 +154,8 @@ def main():
     ap.add_argument("--min-rec", type=int, default=None,
                     help="推文數門檻；不給則八卦/股板 100（爆文）、小板見 BOARD_MIN_REC。"
                          "設低於 100 才看得到實際推文數")
+    ap.add_argument("--boo", type=int, nargs="?", const=10, default=None,
+                    help="改抓噓文：噓數 ≥ N（只給旗標不給數字則 10）。與 --min-rec 互斥")
     ap.add_argument("--days", type=int, default=2, help="只留最近 N 天的文章")
     ap.add_argument("--pages", type=int, default=1, help="每板抓幾頁搜尋結果（每頁 20 篇）")
     ap.add_argument("--limit", type=int, default=15, help="每板最多列幾篇")
@@ -143,6 +163,13 @@ def main():
     ap.add_argument("--no-mute", action="store_true", help="不過濾例行文")
     args = ap.parse_args()
 
+    if args.boo is not None:
+        if args.min_rec is not None:
+            ap.error("--boo 與 --min-rec 不可併用")
+        if args.boo < 1:
+            ap.error("--boo 要給正數（噓數門檻）")
+
+    boo = args.boo is not None
     seen = load_seen() if args.unseen else {}
     now = datetime.now(timezone.utc).astimezone()
     cutoff = now - timedelta(days=args.days)
@@ -150,8 +177,12 @@ def main():
     total = 0
 
     for board in [b.strip() for b in args.boards.split(",") if b.strip()]:
-        min_rec = args.min_rec
-        if min_rec is None:
+        if boo:
+            # PTT 搜尋的 recommend: 吃負數，-N 即「噓數 ≥ N」。
+            min_rec = -args.boo
+        elif args.min_rec is not None:
+            min_rec = args.min_rec
+        else:
             min_rec = BOARD_MIN_REC.get(board, DEFAULT_MIN_REC)
         items = []
         for page in range(1, args.pages + 1):
@@ -170,24 +201,29 @@ def main():
                 continue
             keep.append(it)
 
-        keep.sort(key=lambda i: (rec_sort_key(i["rec"]), i["time"] or now), reverse=True)
+        # 噓文模式要「噓越多排越前」，也就是分數越負越前面。
+        sign = -1 if boo else 1
+        keep.sort(key=lambda i: (sign * rec_score(i["rec"]), i["time"] or now), reverse=True)
         keep = keep[:args.limit]
 
-        print(f"\n## 🔥 PTT {board} 板 · 推文 ≥{min_rec} · 近 {args.days} 天\n")
+        icon, kind = ("👎", "噓文") if boo else ("🔥", "爆文")
+        gate = f"噓 ≥{args.boo}" if boo else f"推文 ≥{min_rec}"
+        print(f"\n## {icon} PTT {board} 板 · {gate} · 近 {args.days} 天\n")
         if not keep:
-            print("_此區間沒有新的爆文_")
+            print(f"_此區間沒有新的{kind}_")
             continue
         for it in keep:
             when = it["time"].strftime("%m/%d %H:%M") if it["time"] else "—"
-            rec = f"{it['rec']}推" if it["rec"] != BLOWN else "爆(≥100)"
-            print(f"- [{md_safe_title(it['title'])}]({md_safe_link(it['url'])}) · {rec} · {when}")
+            print(f"- [{md_safe_title(it['title'])}]({md_safe_link(it['url'])})"
+                  f" · {rec_label(it['rec'])} · {when}")
             seen[it["url"]] = now.astimezone(timezone.utc).isoformat()
             total += 1
 
     if args.unseen:
         save_seen(seen)
     if total == 0:
-        print("\n_（沒有新爆文。若想重看全部，拿掉 --unseen）_")
+        kind = "噓文" if boo else "爆文"
+        print(f"\n_（沒有新{kind}。若想重看全部，拿掉 --unseen）_")
 
 
 if __name__ == "__main__":

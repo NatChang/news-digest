@@ -71,13 +71,14 @@ Examples:
 When the user mentions **PTT / 批踢踢 / 爆文 (hot posts) / 八卦板 (Gossiping) / 股板 (Stock)** (e.g. "show me PTT hot posts"), do **not** run `fetch_feeds.py`. Run `ptt_hot.py` from the same directory instead, then present its Markdown output directly (titles are already Chinese; no translation needed):
 
 ```bash
-python3 "<this skill's directory>/ptt_hot.py" [--boards Gossiping,Stock,Tech_Job,Lifeismoney,Baseball] [--days N] [--min-rec N] [--unseen]
+python3 "<this skill's directory>/ptt_hot.py" [--boards Gossiping,Stock,Tech_Job,Lifeismoney,Baseball] [--days N] [--min-rec N | --boo N] [--unseen]
 ```
 
 - Defaults to `--boards Gossiping,Stock,Tech_Job,Lifeismoney,Baseball --days 2` — five boards, last two days.
 - **Score threshold**: without `--min-rec`, Gossiping/Stock use 100 (爆 = "blown"), while smaller boards drop lower automatically (Tech_Job 30, Lifeismoney 50 — see `BOARD_MIN_REC` in the script); low-traffic boards return almost nothing at 100. Passing `--min-rec` applies one value to every board.
 - If the user names a single board ("PTT Stock hot posts") → `--boards Stock`. Any other board name works too (Foreign_Inv, home-sale, …).
 - "Popular / highly-rated" but not specifically 爆文 → loosen to `--min-rec 50`. (**Any score of 100+ renders as 爆 in the list page, so the real number is hidden and those posts cannot be ranked against each other**; set 50 to see actual scores in the 50–99 range.)
+- **Downvoted posts** (噓文 — "find the most-booed posts") → use `--boo N` (booed ≥ N; bare `--boo` means 10). Mutually exclusive with `--min-rec`. The list page only reveals the tens digit of a negative score (X5 = 50–59 boos, XX = 100+), so the script prints honest ranges — never invent an exact number.
 - De-dup follows this skill's convention: **pass `--unseen` by default** (state lives in `~/.news-digest/ptt_seen.json`, separate from the news `seen.json`). Drop it only when the user says "all / re-show".
 - The script already mutes routine posts that go viral every single day (after-hours chat, institutional buy/sell tables, …); `--no-mute` disables that.
 - How to summarize depends on the board:
