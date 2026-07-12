@@ -1,5 +1,8 @@
 # news-digest
 
+> 🧪 **你正在 `beta` 分支上。** 這裡比穩定版多了 [PTT 爆文功能](#ptt-爆文beta僅此分支)（`ptt_hot.py`），版本為 `v1.2.0-beta.1`。
+> 穩定版在 `main`（`v1.1.0`），不含 PTT。要回穩定版：`git checkout main`。
+
 從一組**公開 RSS feed** 抓近期新聞，依分類（投資 / IT 產品 / 技術）整理成帶原文連結的重點列表；英文標題會由 Claude 翻成繁體中文。純用系統 `curl`，**不需 API key、不需登入**，`fetch_feeds.py` 只依賴 Python 3 標準庫，不上傳任何本機資料。
 
 > 在 Claude 對話輸入 `/news-digest` 即可使用，例如 `/news-digest 最近三天 投資`。
@@ -43,6 +46,45 @@ python3 fetch_feeds.py --days 7 --category all --format json
 
 直接跑腳本時，英文標題會保留 `[EN→需翻譯]` 標記（透過 Claude 使用才會翻成中文）。
 
+## PTT 爆文（beta，僅此分支）
+
+PTT 沒有「熱門文章」的 RSS，所以這支腳本走另一條路：PTT 網頁搜尋的 `recommend:` 語法是唯一能**按推文數過濾**的官方介面，`ptt_hot.py` 解析它的結果，輸出跟新聞摘要同一套 Markdown 格式。一樣只用 `curl`、不需登入。
+
+```bash
+python3 ptt_hot.py                                   # 預設五板、近兩天
+python3 ptt_hot.py --boards Stock --days 3           # 只看股板
+python3 ptt_hot.py --boards Tech_Job --min-rec 30    # 自訂推文門檻
+```
+
+| 參數 | 說明 | 預設 |
+|------|------|------|
+| `--boards` | 逗號分隔的看板名（任何板都可以：`Foreign_Inv`、`home-sale`…） | `Gossiping,Stock,Tech_Job,Lifeismoney,Baseball` |
+| `--days N` | 只收最近 N 天內的文章 | `2` |
+| `--min-rec N` | 推文數門檻；給了就**全板套用同一個值** | 見下方「門檻」 |
+| `--pages N` | 每板抓幾頁搜尋結果（每頁 20 篇） | `1` |
+| `--limit N` | 每板最多列幾篇 | `15` |
+| `--unseen` | 只列沒看過的（狀態記在 `~/.news-digest/ptt_seen.json`，與新聞的 `seen.json` **分開**） | 關閉 |
+| `--no-mute` | 不過濾例行文 | 關閉 |
+| `--version` | 印出版本 | — |
+
+**門檻**：不給 `--min-rec` 時，八卦／股板用 `100`（即「爆」），小板自動降低（`Tech_Job` 30、`Lifeismoney` 50，見腳本裡的 `BOARD_MIN_REC`）——小板流量低，用 100 幾乎撈不到東西。
+
+**推文數看得到嗎**：PTT 列表頁對 100 以上一律只顯示「爆」，**看不到實際數字，破百的文章之間也無法互相排序**。這是 PTT 的顯示限制，不是解析漏抓。想看到 50–99 的真實推文數，把門檻設成 `--min-rec 50`。
+
+**例行文過濾**：盤後閒聊、三大法人買賣金額統計表、`[LIVE]` 直播串這類「每天都會爆但沒有資訊量」的文章預設會被濾掉（清單見腳本裡的 `NOISE`），`--no-mute` 可關閉。
+
+### ⚠️ 已知問題：抓取失敗會偽裝成「沒有爆文」
+
+PTT 會擋密集請求，偶爾回 `Connection reset by peer`。發生時錯誤只寫到 **stderr**，但該板在 **stdout** 上照樣印「_此區間沒有新的爆文_」：
+
+```
+[抓取失敗] https://www.ptt.cc/bbs/Stock/search?...: curl: (35) Recv failure    ← stderr
+## 🔥 PTT Stock 板 · 推文 ≥100 · 近 2 天
+_此區間沒有新的爆文_                                                            ← stdout（誤導）
+```
+
+也就是說**網路失敗看起來會像「今天真的沒爆文」**。目前沒有重試機制。看到某板空空如也時，請順便確認 stderr 有沒有 `[抓取失敗]`；隔幾秒重跑通常就正常了。這是這個功能還掛在 beta、尚未併入 `main` 的原因之一。
+
 ## 加入 / 修改 分類與 feed 來源 ⭐
 
 分兩層：**內建預設**（開發者維護）＋**使用者自訂**（你自己的）。啟動時後者疊加到前者，欄位級合併。
@@ -85,13 +127,15 @@ python3 fetch_feeds.py --days 7 --category all --format json
 
 ## 改動後請跑安全性測試 ⚠️
 
-**動過 `fetch_feeds.py` 或 `saved.py` 就跑一次**（零依賴、不連網、幾秒鐘）：
+**動過 `fetch_feeds.py`、`saved.py` 或 `ptt_hot.py` 就跑一次**（零依賴、不連網、幾秒鐘）：
 
 ```bash
 python3 test_security.py     # 有防線被破壞會以非零狀態結束
 ```
 
-推上 GitHub 時 CI 也會自動跑（`.github/workflows/test.yml`，每個 PR 與推上 `main` 時）。本機先跑只是為了不用等 CI 才發現。
+`ptt_hot.py` 也算在內：PTT 的標題與連結同樣是攻擊者可控的外部輸入，它直接重用 `fetch_feeds.py` 的 `md_safe_title` / `md_safe_link`（刻意不另寫一份），所以那組防線一破，PTT 輸出跟著中槍。
+
+CI（`.github/workflows/test.yml`）只在**每個 PR** 與**推上 `main`** 時跑——**直接 push 到 `beta` 不會觸發 CI**。在這個分支上工作時，本機這一步就是唯一的把關。
 
 feed 給的**標題、連結、XML 本身都是攻擊者可控的**，而它們最後會變成你會點的 Markdown、以及 Claude 讀進去的上下文。`test_security.py` 拿惡意輸入去打真正的函式，驗證這些防線還在：DTD／實體爆炸與 XXE 一律拒收、標題不能偽造標題列或連結、`javascript:`／`data:`／`file:` 不會變成可點連結、連結裡的 `)` 與空白會被編碼（否則會提前關掉 `(url)`，讓後面的殘字變成注入連結）、`mute` 只做子字串比對而不是 regex。
 
