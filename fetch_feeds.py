@@ -21,6 +21,7 @@ Usage:
 --auto-unseen   First run of a day shows everything; later same-day runs only new.
 --state PATH    Seen-links state file (default: ~/.news-digest/seen.json).
 --config PATH   User categories/feeds overlay (default: ~/.news-digest/config.json).
+--version       Print the version (from _version.py) and exit.
 
 The config's optional "mute" list drops any article whose title contains one of
 its terms, so a columnist or topic you never want to read never shows up.
@@ -35,6 +36,8 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin
 from xml.etree import ElementTree as ET
+
+from _version import __version__
 
 # --- Feed catalogue -------------------------------------------------------
 # The shipped default categories/feeds live in a tracked data file next to this
@@ -437,6 +440,8 @@ def _iso_date(s):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--version", action="version",
+                    version=f"news-digest {__version__}")
     ap.add_argument("--days", type=int, default=1)
     ap.add_argument("--date", type=_iso_date,
                     help="only a single local calendar day (YYYY-MM-DD); overrides --days")
