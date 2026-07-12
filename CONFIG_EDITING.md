@@ -11,6 +11,7 @@
 2. 依需求改 `categories` / `feeds`（schema 見下），保留原有內容，只增修使用者要的部分。
 3. **新增/修改 feed 前，先用 `curl` 實抓一次該 URL 確認是合法 RSS/Atom**（scheme 僅 http(s)），抓不到或非 XML 就回報、不要寫進去。
 4. 寫回檔案後，跑一次對應分類驗證有出文章，再回報使用者。
+5. 這個檔是私人的（訂閱與 `mute` 都反映個人偏好，且**不進 git**）。新建它時一併 `chmod 600`（目錄 `chmod 700`）—— 腳本寫 `seen.json` / `saved.json` 時會自己設好，但 `config.json` 是你手寫的，別留成人人可讀。
 
 **config.json schema**（使用者檔，只寫要疊加的部分）：
 ```json

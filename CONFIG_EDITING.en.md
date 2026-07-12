@@ -25,6 +25,10 @@ category", "add an RSS source", etc., **you (Claude) read and write this JSON**:
    it and don't write it.
 4. After writing the file, run the matching category once to verify articles
    appear, then report back to the user.
+5. This file is private (feeds and `mute` both reveal personal taste, and it is
+   **not in git**). When creating it, `chmod 600` it (and `chmod 700` the
+   directory) — the scripts do this for `seen.json` / `saved.json` themselves,
+   but `config.json` is written by you, so don't leave it world-readable.
 
 **config.json schema** (user file; write only the overlay):
 ```json

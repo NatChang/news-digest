@@ -206,7 +206,13 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 def fetch(url, timeout=20):
     try:
         out = subprocess.run(
+            # --proto / --proto-redir: a feed URL is config data and a redirect
+            # target is remote data; pin both to http(s) so neither can steer
+            # curl into file:// / scp:// etc. Current curl defaults to this for
+            # redirects, but the guarantee belongs in the call, not in the
+            # version we happen to run.
             ["curl", "-sL", "-m", str(timeout), "-A", UA,
+             "--proto", "=http,https", "--proto-redir", "=http,https",
              "--max-filesize", "10m", "--max-redirs", "3",
              "-H", "Accept: application/rss+xml, application/atom+xml, application/xml, text/xml",
              url],
@@ -260,6 +266,14 @@ def md_safe_title(s):
              .replace("<", "＜").replace(">", "＞"))
 
 
+# feed 的連結同樣不可信：( ) 與空白（含換行/tab）都會提前終止 Markdown 的 (url)，
+# 讓後面的殘字變成可點的注入連結，故一律百分比編碼。合法網址本就不含這些字元。
+# 任何要把連結寫進 Markdown 的地方都必須走這裡（saved.py 也匯入同一支）。
+def md_safe_link(link):
+    link = (link or "").replace("(", "%28").replace(")", "%29")
+    return re.sub(r"\s", "%20", link)
+
+
 # Storm 風傳媒 RSS gives links like https://www.storm.mg/12345?utm_source=rss
 # which 404; the working URL is https://www.storm.mg/article/12345
 _STORM_RSS = re.compile(r"^(https?://www\.storm\.mg)/(\d+)(?:\?.*)?$")
@@ -309,9 +323,12 @@ def save_state(path, state):
     try:
         d = os.path.dirname(path)
         if d:
-            os.makedirs(d, exist_ok=True)
+            os.makedirs(d, mode=0o700, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False)
+        # What you read is nobody else's business: keep the reading history (and
+        # the sibling config, which holds the mute list) owner-only.
+        os.chmod(path, 0o600)
     except Exception as e:
         sys.stderr.write(f"[state save fail] {path}: {e}\n")
 
@@ -333,8 +350,9 @@ def parse_feed(raw):
     if not raw:
         return items
     # 不可信 XML：合法 RSS/Atom 不含 DTD/實體宣告，直接拒收以擋 billion-laughs
-    # 等實體爆炸類 DoS（零依賴，取代 defusedxml；殘餘僅 DoS，非資料外洩）
-    if b"<!DOCTYPE" in raw[:4096] or b"<!ENTITY" in raw:
+    # 等實體爆炸類 DoS（零依賴，取代 defusedxml；殘餘僅 DoS，非資料外洩）。
+    # 兩者都掃全文：DOCTYPE 只掃開頭的話，一段夠長的前置註解就能把它推出視窗外。
+    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
         sys.stderr.write("[parse skip] DTD/ENTITY not allowed\n")
         return items
     try:
@@ -569,10 +587,7 @@ def main():
                 d = it["published"]
                 ds = d.astimezone().strftime("%m/%d %H:%M") if d else "—"
                 flag = f"  [translate→{args.lang}]" if needs_translation(it["title"], args.lang) else ""
-                # 連結中的 ) 與空白（含換行/tab）會提前終止 Markdown 的 (url)，需編碼
-                link = (it["link"] or "").replace("(", "%28").replace(")", "%29")
-                link = re.sub(r"\s", "%20", link)
-                lines.append(f"- [{md_safe_title(it['title'])}]({link}) · {ds}{flag}")
+                lines.append(f"- [{md_safe_title(it['title'])}]({md_safe_link(it['link'])}) · {ds}{flag}")
             cut = truncated.get((c, source))
             if cut:
                 more = S["more_record"] if record else S["more"]
