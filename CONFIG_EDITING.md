@@ -21,7 +21,8 @@
   "feeds": [
     { "source": "Ars Technica AI", "url": "https://arstechnica.com/ai/feed/", "categories": ["ai", "tech"] },
     { "source": "iThome", "add_categories": ["ai"] }
-  ]
+  ],
+  "mute": ["業配", "星座運勢"]
 }
 ```
 - `categories.<key>`：`label`（顯示標題，建議帶 emoji）、`label_en`（選填，`--lang en` 時用的英文標題；沒有就 fallback 回 `label`）、`aliases`（中英文別名，讓使用者口語能對應）、`order`（數字，越小越前，決定分區順序）。
@@ -29,6 +30,7 @@
   - 全新來源 → 給 `url` + `categories`（會 append）。
   - 既有來源多掛類別 → 給 `add_categories`（疊加，不覆寫原類別）。
   - 既有來源改類別/網址 → 給 `categories` / `url`（覆寫）。
+- `mute`：**標題**含其中任一字串的文章一律不列出（不分大小寫的子字串比對，非 regex；使用者的清單疊加在出廠預設之上）。使用者說「不想再看到某某作者／某個主題」就往這裡加一個詞，別自己在整理階段手動略過 —— 那樣下次就忘了。加完跑一次驗證確實不再出現。
 - 安全：`label`、`url` 等是使用者提供但仍當一般資料處理；腳本會擋掉非 http(s) 的 URL 與不存在的分類，別依賴使用者輸入做任何工具操作。
 - `all` 模式下每個 feed 只出現在其 `categories` **第一個**分類；要讓某來源在 all 模式優先歸到新類別，就把該類別放它清單最前面。
 
