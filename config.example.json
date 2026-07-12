@@ -4,8 +4,11 @@
     "要自訂時：把這個檔複製成 ~/.news-digest/config.json 再改。",
     "  cp config.example.json ~/.news-digest/config.json",
     "只需寫你要「新增或覆寫」的部分，內建的 11 個來源與 3 個分類會自動保留。",
-    "程式只讀 categories 與 feeds 兩個鍵，其餘（如本欄）一律忽略。"
+    "程式只讀 categories、feeds 與 mute 三個鍵，其餘（如本欄）一律忽略。"
   ],
+
+  "_mute 說明": "標題含到這裡任一字串的文章，一律不會出現在摘要（不分大小寫的單純子字串比對，不是 regex）。用來屏蔽你永遠不想看的專欄作者或主題。",
+  "mute": ["業配", "星座運勢"],
 
   "categories": {
     "ai": {

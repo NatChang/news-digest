@@ -21,6 +21,9 @@ Usage:
 --auto-unseen   First run of a day shows everything; later same-day runs only new.
 --state PATH    Seen-links state file (default: ~/.news-digest/seen.json).
 --config PATH   User categories/feeds overlay (default: ~/.news-digest/config.json).
+
+The config's optional "mute" list drops any article whose title contains one of
+its terms, so a columnist or topic you never want to read never shows up.
 """
 import argparse
 import json
@@ -53,14 +56,15 @@ def _read_catalogue_file(path, label):
             data = json.load(f)
         if isinstance(data, dict):
             return {"categories": data.get("categories") or {},
-                    "feeds": data.get("feeds") or []}
+                    "feeds": data.get("feeds") or [],
+                    "mute": data.get("mute") or []}
         sys.stderr.write(f"[{label}] {path}: top level must be an object; ignored\n")
     except FileNotFoundError:
         if label == "defaults":
             sys.stderr.write(f"[{label}] {path} not found; starting from empty defaults\n")
     except Exception as e:
         sys.stderr.write(f"[{label}] {path}: {e}; ignored\n")
-    return {"categories": {}, "feeds": []}
+    return {"categories": {}, "feeds": [], "mute": []}
 
 
 def _merge_config(base, user):
@@ -74,11 +78,14 @@ def _merge_config(base, user):
         - existing source with "add_categories"      -> appends those categories
         - a user feed may itself use add_categories on a brand-new source, which
           is treated as its category list.
+    mute: the two lists are concatenated (a user can only add terms, and the
+        same term twice is the same term).
     Untrusted values (labels/urls) are validated later where they are used.
     """
     merged = {
         "categories": dict(base.get("categories", {})),
         "feeds": [dict(f) for f in base.get("feeds", [])],
+        "mute": list(base.get("mute", [])) + list(user.get("mute") or []),
     }
     # categories: field-by-field overlay
     for key, spec in (user.get("categories") or {}).items():
@@ -174,6 +181,24 @@ def build_catalogue(cfg, lang="zh"):
         seen_urls[norm] = src
         feeds.append((src, url, valid))
     return feeds, labels, aliases, order
+
+
+def mute_terms(cfg):
+    """Lowercased keywords from the config's `mute` list. An article whose title
+    contains any of them is dropped before it ever reaches the digest — the way
+    to stop a recurring columnist or topic you never want to read. Plain
+    substring match (no regex), so a term is exactly the text it looks like."""
+    terms = []
+    for t in cfg.get("mute", []):
+        if isinstance(t, str) and t.strip():
+            terms.append(t.strip().lower())
+    return terms
+
+
+def is_muted(title, terms):
+    t = (title or "").lower()
+    return any(term in t for term in terms)
+
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
@@ -417,7 +442,9 @@ def main():
                     help=f"path to the user categories/feeds config (default: {DEFAULT_CONFIG_PATH})")
     args = ap.parse_args()
 
-    feeds_cat, CATEGORY_LABELS, aliases, order = build_catalogue(load_config(args.config), args.lang)
+    cfg = load_config(args.config)
+    feeds_cat, CATEGORY_LABELS, aliases, order = build_catalogue(cfg, args.lang)
+    muted = mute_terms(cfg)
     S = _STRINGS[args.lang]
 
     raw_cat = args.category.strip()
@@ -462,6 +489,8 @@ def main():
         items = parse_feed(raw)
         kept = []
         for it in items:
+            if is_muted(it["title"], muted):
+                continue
             d = it["published"]
             if date_filter:
                 # a specific-day query only makes sense for dated items
